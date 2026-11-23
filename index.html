@@ -440,23 +440,73 @@ const log = (msg, cls) => {
 };
 const setStatus = (html) => { $("status").innerHTML = html; };
 
+// Fehler lesbar machen – iOS-Web-BLE-Browser werfen teils Strings, null oder undefined statt Error-Objekten
+function describeError(e) {
+  if (e instanceof Error || (e && typeof e === "object" && ("name" in e || "message" in e)))
+    return `${e.name || "Error"}: ${e.message || "(keine Meldung)"}`;
+  if (e === undefined) return "undefined (Browser lieferte keinen Fehlertext)";
+  if (e === null) return "null";
+  if (typeof e === "object") { try { return JSON.stringify(e); } catch { return String(e); } }
+  return `${typeof e}: ${String(e)}`;
+}
+// Echter Abbruch durch den Nutzer bzw. „nichts gefunden“ – dann keine weiteren Suchvarianten probieren
+const isUserCancel = (e) => e && (e.name === "NotFoundError" || e.name === "AbortError");
+
+// Suchvarianten, von genau bis offen. Volle UUID + 16-Bit-Kurzform, weil Browser das unterschiedlich verstehen.
+function searchVariants() {
+  const svc = [SERVICE, 0xfff0];
+  if ($("allDevices").checked)
+    return [["alle Geräte", { acceptAllDevices: true, optionalServices: svc }],
+            ["alle Geräte (ohne optionalServices)", { acceptAllDevices: true }]];
+  return [
+    ["Service FFF0 oder Name AP…", { filters: [{ services: [SERVICE] }, { namePrefix: "AP" }, { namePrefix: "ALLPOWERS" }], optionalServices: svc }],
+    ["Name AP…", { filters: [{ namePrefix: "AP" }], optionalServices: svc }],
+    ["Service FFF0 (kurz)", { filters: [{ services: [0xfff0] }], optionalServices: [0xfff0] }],
+    ["alle Geräte", { acceptAllDevices: true, optionalServices: svc }],
+  ];
+}
+
+async function pickDevice() {
+  let last;
+  for (const [label, opts] of searchVariants()) {
+    log("Suche: " + label);
+    try { return await navigator.bluetooth.requestDevice(opts); }
+    catch (e) {
+      log("  abgelehnt: " + describeError(e), "err");
+      if (isUserCancel(e)) throw e;
+      last = e;
+    }
+  }
+  throw last;
+}
+
+// Erst volle UUID, dann Kurzform
+async function firstOk(label, ...attempts) {
+  let last;
+  for (const fn of attempts) {
+    try { return await fn(); } catch (e) { last = e; log(`  ${label}: ${describeError(e)}`, "err"); }
+  }
+  throw last;
+}
+
 async function connect() {
+  let step = "Gerätesuche";
   try {
-    const opts = $("allDevices").checked
-      ? { acceptAllDevices: true, optionalServices: [SERVICE] }
-      : { filters: [{ services: [SERVICE] }, { namePrefix: "AP" }, { namePrefix: "ALLPOWERS" }],
-          optionalServices: [SERVICE] };
-    log("Suche: " + ($("allDevices").checked ? "alle Geräte" : "Service FFF0 oder Name AP…/ALLPOWERS…"));
-    device = await navigator.bluetooth.requestDevice(opts);
+    device = await pickDevice();
     log(`Gewählt: ${device.name || "(ohne Namen)"} [${device.id}]`);
     device.addEventListener("gattserverdisconnected", onDisconnected);
     setStatus(`Verbinde mit <b>${escapeHtml(device.name || device.id)}</b> …`);
     $("devName").textContent = device.name || "–";
 
+    step = "GATT-Verbindung";
     const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(SERVICE);
-    notifyChar = await service.getCharacteristic(NOTIFY);
-    writeChar = await service.getCharacteristic(WRITE);
+    step = "Service FFF0";
+    const service = await firstOk(step, () => server.getPrimaryService(SERVICE), () => server.getPrimaryService(0xfff0));
+    step = "Kennung FFF1";
+    notifyChar = await firstOk(step, () => service.getCharacteristic(NOTIFY), () => service.getCharacteristic(0xfff1));
+    step = "Kennung FFF2";
+    writeChar = await firstOk(step, () => service.getCharacteristic(WRITE), () => service.getCharacteristic(0xfff2));
+    step = "Notifications";
     notifyChar.addEventListener("characteristicvaluechanged", onNotify);
     await notifyChar.startNotifications();
 
@@ -466,14 +516,14 @@ async function connect() {
     await requestStatus();
     pollTimer = setInterval(requestStatus, POLL_MS);
   } catch (e) {
-    log(`Fehler (${e.name}): ${e.message}`, "err");
-    if (e.name === "NotFoundError") {
+    log(`Fehler bei ${step}: ${describeError(e)}`, "err");
+    if (isUserCancel(e)) {
       setStatus("Kein Gerät gewählt. Nicht gefunden? Station darf mit keinem anderen Handy und nicht mit der "
         + "ALLPOWERS-App verbunden sein. Sonst „Alle Geräte anzeigen“ probieren.");
-      return;
+    } else {
+      setStatus(`<span class="err">Fehler bei ${escapeHtml(step)}: ${escapeHtml(describeError(e))}</span>`);
     }
-    setStatus(`<span class="err">Fehler: ${escapeHtml(e.message)}</span>`);
-    if (device?.gatt.connected) device.gatt.disconnect();
+    if (device?.gatt?.connected) device.gatt.disconnect();
   }
 }
 
@@ -498,7 +548,7 @@ async function write(bytes, label) {
 
 async function requestStatus() {
   try { await write(STATUS_REQUEST, "Statusanfrage"); }
-  catch (e) { log("Schreibfehler: " + e.message, "err"); }
+  catch (e) { log("Schreibfehler: " + describeError(e), "err"); }
 }
 
 function onNotify(ev) {
@@ -591,7 +641,7 @@ document.querySelectorAll("[data-out]").forEach(btn => btn.addEventListener("cli
   try {
     await write(controlFrame(next), `${key.toUpperCase()} ${next[key] ? "an" : "aus"}`);
     setTimeout(requestStatus, 800);
-  } catch (e) { log("Schreibfehler: " + e.message, "err"); }
+  } catch (e) { log("Schreibfehler: " + describeError(e), "err"); }
 }));
 
 $("btnConnect").addEventListener("click", connect);
