@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OwlPowers BLE</title>
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="favicon-16.png" type="image/png" sizes="16x16">
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1E8CFF">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1b1f24; --muted: #66707b;
+    --line: #dde1e6; --accent: #1f7a4d; --warn: #b45309; --err: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --card: #1c1f24; --text: #e7e9ec; --muted: #9aa3ad;
+      --line: #2c3138; --accent: #4cc38a; --warn: #f0a14a; --err: #f07167;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  h1 img { border-radius: 8px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
+  button { font: inherit; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line);
+           background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  label.chk { color: var(--muted); font-size: 14px; display: flex; gap: 6px; align-items: center; }
+  .status { font-size: 14px; color: var(--muted); }
+  .status b { color: var(--text); }
+  .notice { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--warn);
+            color: var(--warn); margin-bottom: 16px; display: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .k { color: var(--muted); font-size: 13px; }
+  .card .v { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .card .v small { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .soc { height: 8px; background: var(--line); border-radius: 4px; margin-top: 10px; overflow: hidden; }
+  .soc > div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .outputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .out { display: flex; justify-content: space-between; align-items: center; }
+  .pill { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .out button { padding: 5px 12px; font-size: 13px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-variant-numeric: tabular-nums; }
+  #log { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+         font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; height: 220px; overflow: auto;
+         white-space: pre-wrap; word-break: break-all; }
+  .err { color: var(--err); }
+  .foot { color: var(--muted); font-size: 13px; margin-top: 28px; }
+
+  /* Powerstation-Grafik (S300 V2, nach Fotos) */
+  .device { padding: 12px; margin-bottom: 12px; }
+  .dv-views { display: flex; align-items: flex-end; gap: 10px; max-width: 760px; margin: 0 auto; }
+  .dv-views svg { display: block; height: auto; min-width: 0; -webkit-tap-highlight-color: transparent; }
+  .dv-side { flex: 170 1 0; } .dv-front { flex: 304 1 0; }
+  @media (max-width: 600px) {
+    .dv-views { flex-wrap: wrap; }
+    .dv-front { flex: 0 0 100%; order: -1; }
+    .dv-side { flex: 0 0 calc(50% - 5px); }
+  }
+  .device .hint { color: var(--muted); font-size: 13px; text-align: center; margin-top: 4px; }
+  .dv-black { fill: #1c1e22; stroke: #3a3f47; stroke-width: 1; }
+  .dv-band  { fill: #16181b; stroke: #3a3f47; stroke-width: 1; }
+  .dv-grey  { fill: #5b6068; stroke: #3a3f47; stroke-width: 1; }
+  .dv-rim   { fill: #111214; }
+  .dv-foot  { fill: #0b0c0d; }
+  .dv-rivet { fill: #c9ced4; stroke: #8d939b; }
+  .dv-vent  { fill: #08090a; }
+  .dv-recess { fill: #222429; stroke: #33373e; }
+  .dv-clip  { fill: #d5d8dc; }
+  .dv-logo  { fill: #cdd1d6; font: italic 800 15px system-ui, sans-serif; letter-spacing: .04em; }
+  .dv-cap   { fill: var(--muted); font: 600 13px system-ui, sans-serif; }
+  .dv-print { fill: #9aa3ad; font: 600 5px system-ui, sans-serif; letter-spacing: .04em; }
+  .dv-print-dark { fill: #4a2a0c; }
+  .dv-inbox { fill: none; stroke: #5b6068; stroke-width: 1; transition: stroke .25s; }
+  .dv-cap12 { fill: #6b7078 !important; }
+  .dv-key { fill: #15171a; stroke: #3a3f47; stroke-width: 1; }
+  .dv-key-text { fill: #59606a; font: 500 9px system-ui, sans-serif; transition: fill .25s; }
+  .dv-bt { fill: none; stroke: #59606a; stroke-width: 1.3; stroke-linejoin: round; transition: stroke .25s; }
+  .dv-live .dv-bt { stroke: #4cc38a; filter: url(#dvGlow); }
+  .dv-lcd { fill: #04070f; stroke: #2b2f36; }
+  .dv-seg { fill: #2f8cff; font: 400 10.5px "DSEG7 Classic", ui-monospace, Menlo, monospace; }
+  .dv-seg-small { font-size: 4.8px; }
+  .dv-seg-on { fill: #2f8cff; }
+  .dv-lcd-label { fill: #2f8cff; font: 700 3.4px system-ui, sans-serif; }
+  .dv-lcd-tiny { fill: #9aa3ad; font: 600 4.5px system-ui, sans-serif; }
+  .dv-lcd-bt { opacity: .12; transition: opacity .25s; }
+  .dv-lcd-bt circle { fill: #2f8cff; }
+  .dv-lcd-bt path { fill: none; stroke: #04070f; stroke-width: .6; stroke-linejoin: round; }
+  .dv-live .dv-lcd-bt { opacity: 1; }
+  .dv-batt { fill: none; stroke: #2f8cff; stroke-width: 1.1; }
+  .dv-cell { fill: #0f1d45; transition: fill .3s; }
+  .dv-cell.lit { fill: #2f6dff; }
+  .dv-lens { fill: #b9bec5; transition: fill .25s; }
+  .dv-refl { fill: #dfe3e8; transition: fill .25s; }
+  .dv-ledc { fill: #f3f5f7; stroke: #9aa0a8; transition: fill .25s; }
+  .dv-beam { opacity: 0; transition: opacity .3s; }
+  .dv-port { fill: #2a2d32; stroke: #4a5059; stroke-width: 1.2; transition: stroke .25s; }
+  .dv-hole, .dv-pin { fill: #0a0b0c; }
+  .dv-usb { fill: #111214; transition: fill .25s; }
+  .dv-out.on .dv-key-text { fill: #57e08f; filter: url(#dvGlow); }
+  .dv-out.on .dv-port { stroke: #4cc38a; }
+  .dv-out.on .dv-usb { fill: #1f8f5a; }
+  .dv-out.on .dv-inbox { stroke: #4cc38a; }
+  #dvCar.on .dv-cap12 { stroke: #4cc38a; stroke-width: 2.5; }
+  .dv-lamp.on .dv-lens, .dv-lamp.on .dv-refl { fill: #fff4cf; }
+  .dv-lamp.on .dv-ledc { fill: #ffffff; filter: url(#dvGlow); }
+  .dv-lamp.on .dv-beam { opacity: 1; }
+  .dv-live [data-out] { cursor: pointer; }
+  .dv-panel-hit { fill: transparent; transition: fill .2s; }
+  .dv-live [data-out]:hover .dv-panel-hit { fill: rgba(255,255,255,.06); }
+
+  /* Mobil */
+  .out { flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 600px) {
+    main { padding: calc(16px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+                    calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+    h1 { font-size: 20px; }
+    .sub { font-size: 14px; margin-bottom: 14px; }
+    .bar { gap: 8px; }
+    .bar button { flex: 1 1 0; min-height: 44px; padding: 8px 6px; }
+    .bar .chk, .bar .status { flex-basis: 100%; }
+    .grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .card { padding: 12px 14px; }
+    .card .v { font-size: 24px; }
+    .outputs { grid-template-columns: 1fr; gap: 10px; }
+    .out button { min-height: 40px; padding: 6px 14px; }
+    .device { padding: 6px 4px 10px; }
+    h2 { margin-top: 22px; }
+    dl { font-size: 14px; gap: 6px 12px; }
+    #log { height: 180px; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1><img src="icon.svg" alt="" width="36" height="36"> OwlPowers BLE</h1>
+  <p class="sub">Liest die Daten deiner Powerstation direkt per Web Bluetooth aus.</p>
+
+  <div class="notice" id="unsupported">
+    Dieser Browser unterstützt kein Web Bluetooth. Nutze Chrome oder Edge (Desktop/Android) über
+    <code>https://</code> oder <code>http://localhost</code>. Safari, iOS und Firefox werden nicht unterstützt.
+  </div>
+
+  <div class="bar">
+    <button class="primary" id="btnConnect">Verbinden</button>
+    <button id="btnDisconnect" disabled>Trennen</button>
+    <button id="btnRefresh" disabled>Aktualisieren</button>
+    <label class="chk"><input type="checkbox" id="allDevices"> Alle Geräte anzeigen</label>
+    <span class="status" id="status">Nicht verbunden</span>
+  </div>
+
+  <div class="card device">
+    <div id="dv" class="dv-views" role="group" aria-label="Powerstation: keine Daten">
+      <svg class="dv-side" viewBox="8 48 170 290" aria-hidden="true">
+      <defs>
+        <filter id="dvGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.5" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <radialGradient id="dvBeam">
+          <stop offset="0" stop-color="#fff1c2" stop-opacity=".85"/>
+          <stop offset="1" stop-color="#fff1c2" stop-opacity="0"/>
+        </radialGradient>
+        <g id="dvVent2x5">
+          <rect width="11" height="4" rx="1"/><rect y="6" width="11" height="4" rx="1"/><rect y="12" width="11" height="4" rx="1"/><rect y="18" width="11" height="4" rx="1"/><rect y="24" width="11" height="4" rx="1"/>
+          <rect x="13" width="11" height="4" rx="1"/><rect x="13" y="6" width="11" height="4" rx="1"/><rect x="13" y="12" width="11" height="4" rx="1"/><rect x="13" y="18" width="11" height="4" rx="1"/><rect x="13" y="24" width="11" height="4" rx="1"/>
+        </g>
+        <g id="dvVent4x4">
+          <rect width="14" height="4" rx="1"/><rect y="6" width="14" height="4" rx="1"/><rect y="12" width="14" height="4" rx="1"/><rect y="18" width="14" height="4" rx="1"/>
+          <rect x="16" width="14" height="4" rx="1"/><rect x="16" y="6" width="14" height="4" rx="1"/><rect x="16" y="12" width="14" height="4" rx="1"/><rect x="16" y="18" width="14" height="4" rx="1"/>
+          <rect x="32" width="14" height="4" rx="1"/><rect x="32" y="6" width="14" height="4" rx="1"/><rect x="32" y="12" width="14" height="4" rx="1"/><rect x="32" y="18" width="14" height="4" rx="1"/>
+          <rect x="48" width="14" height="4" rx="1"/><rect x="48" y="6" width="14" height="4" rx="1"/><rect x="48" y="12" width="14" height="4" rx="1"/><rect x="48" y="18" width="14" height="4" rx="1"/>
+        </g>
+      </defs>
+
+            <!-- ===================== LINKE SEITE ===================== -->
+      <rect class="dv-black" x="16" y="66" width="154" height="226" rx="8"/>
+      <rect class="dv-black" x="16" y="58" width="92" height="22" rx="10"/>
+      <circle class="dv-rivet" cx="94" cy="69" r="6"/>
+      <use href="#dvVent4x4" class="dv-vent" x="34" y="86"/>
+      <use href="#dvVent2x5" class="dv-vent" x="124" y="72"/>
+      <rect class="dv-band" x="16" y="124" width="154" height="41"/>
+      <g class="dv-out" id="dvIn">
+        <rect class="dv-inbox" x="30" y="128" width="56" height="32" rx="3"/>
+        <text class="dv-print" x="58" y="134.5" text-anchor="middle">INPUT</text>
+        <circle class="dv-port" cx="44" cy="148" r="4.5"/><circle class="dv-hole" cx="44" cy="148" r="1.5"/>
+        <rect x="59" y="142" width="11" height="12" rx="1" fill="#d8362f"/>
+        <rect x="70" y="142" width="11" height="12" rx="1" fill="#0d0e10" stroke="#3a3f47"/>
+      </g>
+      <g class="dv-out" id="dvCar">
+        <rect x="91" y="137" width="12" height="13" rx="2" fill="#6b7078"/>
+        <circle class="dv-port dv-cap12" cx="124" cy="144" r="17"/>
+        <text class="dv-print dv-print-dark" x="124" y="146" text-anchor="middle">DC 12V</text>
+      </g>
+      <rect class="dv-rim" x="16" y="282" width="154" height="12" rx="4"/>
+      <rect class="dv-foot" x="24" y="294" width="16" height="5" rx="1"/><rect class="dv-foot" x="146" y="294" width="16" height="5" rx="1"/>
+
+            <text class="dv-cap" x="93" y="324" text-anchor="middle">Links</text>
+      </svg>
+      <svg class="dv-front" viewBox="184 12 304 326" aria-hidden="true">
+      <!-- ===================== VORDERSEITE ===================== -->
+      <!-- Bügelgriff mit orangem Griffstück -->
+      <path class="dv-black" fill-rule="evenodd" d="M192 34 a14 14 0 0 1 14 -14 H466 a14 14 0 0 1 14 14 V70 H192 Z M216 34 V70 H456 V34 Z"/>
+      <rect x="238" y="39" width="196" height="13" rx="6.5" fill="#f28c28"/>
+      <!-- Gehäuse -->
+      <rect class="dv-grey" x="192" y="160" width="288" height="128" rx="6"/>
+      <rect class="dv-black" x="192" y="66" width="288" height="57" rx="4"/>
+      <rect class="dv-band" x="190" y="123" width="292" height="42" rx="2"/>
+      <path class="dv-black" d="M289.5 165 H382.5 V181 L374 193 H298 L289.5 181 Z"/>
+      <text class="dv-logo" x="336" y="210" text-anchor="middle">OWLPOWERS</text>
+      <rect class="dv-rim" x="192" y="278" width="288" height="14" rx="4"/>
+      <rect class="dv-foot" x="199" y="292" width="20" height="5" rx="1"/><rect class="dv-foot" x="453" y="292" width="20" height="5" rx="1"/>
+      <text class="dv-print" id="dvHz" x="472" y="77" text-anchor="end"></text>
+
+      <!-- AC: Schuko-Steckdosen + AC-Taste -->
+      <g class="dv-out" id="dvAc" data-out="ac">
+        <rect class="dv-panel-hit" x="248" y="67" width="176" height="55" rx="6"/>
+        <rect class="dv-recess" x="255.5" y="69.5" width="49" height="50" rx="3"/>
+        <circle class="dv-port" cx="280" cy="94.5" r="21"/>
+        <circle class="dv-hole" cx="270" cy="94.5" r="3.2"/><circle class="dv-hole" cx="290" cy="94.5" r="3.2"/>
+        <rect class="dv-clip" x="277" y="74.5" width="6" height="4" rx="1"/><rect class="dv-clip" x="277" y="110.5" width="6" height="4" rx="1"/>
+        <rect class="dv-recess" x="366.5" y="69.5" width="49" height="50" rx="3"/>
+        <circle class="dv-port" cx="391" cy="94.5" r="21"/>
+        <circle class="dv-hole" cx="381" cy="94.5" r="3.2"/><circle class="dv-hole" cx="401" cy="94.5" r="3.2"/>
+        <rect class="dv-clip" x="388" y="74.5" width="6" height="4" rx="1"/><rect class="dv-clip" x="388" y="110.5" width="6" height="4" rx="1"/>
+        <rect class="dv-key" x="307.5" y="136" width="16" height="16" rx="3"/>
+        <text class="dv-key-text" x="315.5" y="147.3" text-anchor="middle">AC</text>
+      </g>
+
+      <!-- Bluetooth-Taste: leuchtet, solange die App verbunden ist -->
+      <g id="dvBt">
+        <rect class="dv-key" x="260.5" y="136" width="16" height="16" rx="3"/>
+        <path class="dv-bt" d="M265 140.5 L272 147.5 L268.5 150.5 V137.5 L272 140.5 L265 147.5"/>
+      </g>
+
+      <!-- Display (nach Nahaufnahme): BT, Restzeit hhh:mm, Akku mit 4 Segmenten, %, Watt OUT -->
+      <rect class="dv-lcd" x="332.5" y="130.5" width="78.5" height="27.5" rx="1.5"/>
+      <g class="dv-lcd-bt">
+        <circle cx="337.2" cy="134.6" r="2.7"/>
+        <path d="M335.9 133.4 L338.5 135.9 L337.2 137.1 V132.1 L338.5 133.3 L335.9 135.8"/>
+      </g>
+      <text class="dv-seg" id="dvTime" x="335" y="147.3" textLength="28" lengthAdjust="spacingAndGlyphs">---:--</text>
+      <rect class="dv-batt" x="365.5" y="133" width="12.5" height="18.4" rx="1"/>
+      <rect class="dv-seg-on" x="369" y="131.5" width="5.5" height="1.6" rx=".4"/>
+      <rect class="dv-cell" id="dvSeg3" x="367" y="134.5" width="9.5" height="3.4"/>
+      <rect class="dv-cell" id="dvSeg2" x="367" y="138.6" width="9.5" height="3.4"/>
+      <rect class="dv-cell" id="dvSeg1" x="367" y="142.7" width="9.5" height="3.4"/>
+      <rect class="dv-cell" id="dvSeg0" x="367" y="146.8" width="9.5" height="3.4"/>
+      <text class="dv-seg dv-seg-small" id="dvPct" x="371.7" y="157" text-anchor="middle">--%</text>
+      <text class="dv-seg" id="dvOut" x="395.5" y="147.3" text-anchor="end">-</text>
+      <text class="dv-lcd-label" x="400" y="140.6" textLength="6.5" lengthAdjust="spacingAndGlyphs">OUT</text>
+      <text class="dv-lcd-label" x="397" y="147.2" textLength="11" lengthAdjust="spacingAndGlyphs">WATTA</text>
+      <text class="dv-lcd-tiny" id="dvInTxt" x="371.5" y="128" text-anchor="middle"></text>
+
+      <!-- Licht: zwei Lampen + orange Tasten (ein gemeinsames Bit) -->
+      <g class="dv-lamp" id="dvLight" data-out="light">
+        <ellipse class="dv-beam" cx="239" cy="144.3" rx="62" ry="52" fill="url(#dvBeam)"/>
+        <ellipse class="dv-beam" cx="432.4" cy="144.3" rx="62" ry="52" fill="url(#dvBeam)"/>
+        <rect class="dv-panel-hit" x="208" y="126" width="48" height="37" rx="4"/>
+        <rect class="dv-panel-hit" x="415" y="126" width="48" height="37" rx="4"/>
+        <rect class="dv-lens" x="225.6" y="131.8" width="26.5" height="25" rx="1.5"/>
+        <polygon class="dv-refl" points="238.9,133.6 250.3,144.3 238.9,155 227.4,144.3"/>
+        <circle class="dv-ledc" cx="238.9" cy="144.3" r="4.5"/>
+        <rect class="dv-lens" x="419.2" y="131.8" width="26.5" height="25" rx="1.5"/>
+        <polygon class="dv-refl" points="432.4,133.6 443.9,144.3 432.4,155 421,144.3"/>
+        <circle class="dv-ledc" cx="432.4" cy="144.3" r="4.5"/>
+        <rect x="212.9" y="133" width="6.3" height="21.6" rx="3" fill="#f28c28"/>
+        <rect x="452.4" y="133" width="6.3" height="21.6" rx="3" fill="#f28c28"/>
+      </g>
+
+            <!-- DC-Taste -->
+      <g class="dv-out" id="dvDcKey" data-out="dc">
+        <rect class="dv-key" x="284" y="136" width="16" height="16" rx="3"/>
+        <text class="dv-key-text" x="292" y="147.3" text-anchor="middle">DC</text>
+      </g>
+      <text class="dv-cap" x="336" y="324" text-anchor="middle">Vorne</text>
+      </svg>
+      <svg class="dv-side" viewBox="494 48 170 290" aria-hidden="true">
+      <!-- ===================== RECHTE SEITE ===================== -->
+      <rect class="dv-black" x="502" y="66" width="154" height="226" rx="8"/>
+      <rect class="dv-black" x="564" y="58" width="92" height="22" rx="10"/>
+      <circle class="dv-rivet" cx="579" cy="69" r="6"/>
+      <use href="#dvVent2x5" class="dv-vent" x="524" y="72"/>
+      <use href="#dvVent4x4" class="dv-vent" x="572" y="86"/>
+      <rect class="dv-band" x="502" y="124" width="154" height="41"/>
+      <g class="dv-out" id="dvDc" data-out="dc">
+        <rect class="dv-panel-hit" x="502" y="124" width="154" height="41"/>
+        <rect x="520" y="128" width="60" height="31" rx="3" fill="#f28c28"/>
+        <text class="dv-print dv-print-dark" x="531" y="134" text-anchor="middle">USB-C</text>
+        <rect class="dv-usb" x="528.5" y="137" width="5.5" height="11" rx="2.7"/>
+        <rect class="dv-usb" x="539" y="132" width="7.5" height="21" rx="1"/>
+        <rect class="dv-usb" x="551" y="132" width="7.5" height="21" rx="1"/>
+        <rect class="dv-usb" x="563" y="132" width="7.5" height="21" rx="1"/>
+        <rect x="590" y="128" width="46" height="31" rx="3" fill="#f28c28"/>
+        <text class="dv-print dv-print-dark" x="613" y="134" text-anchor="middle">DC OUTPUT</text>
+        <circle class="dv-usb" cx="602.5" cy="145" r="4.5"/><circle class="dv-pin" cx="602.5" cy="145" r="1.5"/>
+        <circle class="dv-usb" cx="622" cy="145" r="4.5"/><circle class="dv-pin" cx="622" cy="145" r="1.5"/>
+      </g>
+      <rect class="dv-rim" x="502" y="282" width="154" height="12" rx="4"/>
+      <rect class="dv-foot" x="510" y="294" width="16" height="5" rx="1"/><rect class="dv-foot" x="632" y="294" width="16" height="5" rx="1"/>
+
+            <text class="dv-cap" x="579" y="324" text-anchor="middle">Rechts</text>
+      </svg>
+    </div>
+    <div class="hint" id="dvHint">S300 V2 · nach dem Verbinden Lampen, Steckdosen oder USB/DC antippen zum Schalten</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="k">Akku</div>
+      <div class="v" id="soc">–<small> %</small></div>
+      <div class="soc"><div id="socBar"></div></div>
+    </div>
+    <div class="card"><div class="k">Eingang</div><div class="v" id="inW">–<small> W</small></div></div>
+    <div class="card"><div class="k">Ausgang</div><div class="v" id="outW">–<small> W</small></div></div>
+    <div class="card"><div class="k">Restlaufzeit</div><div class="v" id="remain">–</div></div>
+  </div>
+
+  <h2>Ausgänge</h2>
+  <div class="outputs">
+    <div class="card out"><span>AC <span class="pill" id="acHz"></span></span>
+      <span><span class="pill" id="ac">–</span> <button data-out="ac" disabled>Umschalten</button></span></div>
+    <div class="card out"><span>DC / USB</span>
+      <span><span class="pill" id="dc">–</span> <button data-out="dc" disabled>Umschalten</button></span></div>
+    <div class="card out"><span>Licht</span>
+      <span><span class="pill" id="light">–</span> <button data-out="light" disabled>Umschalten</button></span></div>
+  </div>
+
+  <h2>Einstellungen &amp; Gerät</h2>
+  <div class="card">
+    <dl>
+      <dt>Gerätename</dt><dd id="devName">–</dd>
+      <dt>ECO-Modus</dt><dd id="eco">–</dd>
+      <dt>ECO-Abschaltzeit</dt><dd id="ecoTime">–</dd>
+      <dt>Lademodus</dt><dd id="workMode">–</dd>
+      <dt>Kfz-Ausgang</dt><dd id="car">–</dd>
+      <dt>Hardware</dt><dd id="hw">–</dd>
+      <dt>Firmware</dt><dd id="fw">–</dd>
+      <dt>Statusbyte</dt><dd id="statusBits" title="Byte 7 des Statuspakets, Bit 7 … Bit 0">–</dd>
+      <dt>Letztes Update</dt><dd id="updated">–</dd>
+    </dl>
+  </div>
+
+  <h2>Rohdaten</h2>
+  <div id="log"></div>
+
+  <p class="foot">
+    Inoffizielles Hobbyprojekt, nicht mit ALLPOWERS verbunden oder von ALLPOWERS unterstützt.
+    Getestet mit der ALLPOWERS S300 V2. Protokoll nach den Open-Source-Projekten
+    <a href="https://github.com/madninjaskillz/allpowers-ble">madninjaskillz/allpowers-ble</a> und
+    <a href="https://github.com/dedalodaelus/esphome-allpowers-ble">dedalodaelus/esphome-allpowers-ble</a>.
+    Laut diesen Projekten ebenfalls kompatibel: R600, S300 („AP S…“). S500/S700 V2 nutzen vermutlich ein anderes Format.
+    Das Schalten der Ausgänge ist experimentell.
+  </p>
+</main>
+
+<script>
+"use strict";
+
+// ---- Protokoll ----------------------------------------------------------
+const SERVICE = 0xfff0;   // 0000fff0-0000-1000-8000-00805f9b34fb
+const NOTIFY  = 0xfff1;   // Telemetrie (Notify)
+const WRITE   = 0xfff2;   // Befehle (Write)
+
+const CMD_STATUS = 0x01, CMD_SETTINGS = 0x03, CMD_NAME = 0x35;
+const STATUS_REQUEST = Uint8Array.of(0xA5,0x65,0xB1,0x00,0x01,0x06,0x01,0x00,0x00,0x00,0x00,0x00);
+const WORK_MODES = ["Leise", "Standard", "Schnell"];
+const POLL_MS = 20000;
+
+const hex = (bytes) => Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(" ");
+const xorAll = (bytes) => bytes.reduce((a, b) => a ^ b, 0);
+const u16 = (d, i) => (d[i] << 8) | d[i + 1];
+const version = (b) => ((b >> 4) > 9 || (b & 15) > 9) ? "0x" + b.toString(16).padStart(2, "0") : `${b >> 4}.${b & 15}`;
+
+// Rahmen: A5 65 .. .. .. <len> <cmd> <payload…> <xor>; Gesamtlänge = 8 + len, XOR über alles = 0
+function validate(d) {
+  if (d.length < 8) return "zu kurz";
+  if (d[0] !== 0xA5 || d[1] !== 0x65) return "unbekannter Header";
+  if (8 + d[5] !== d.length) return "Länge inkonsistent";
+  if (xorAll(d) !== 0) return "Prüfsumme falsch";
+  return null;
+}
+
+function parseStatus(d) {
+  if (d.length < 16) throw new Error("Statuspaket unvollständig");
+  if (d[8] > 100) throw new Error("Akkustand > 100 %");
+  const s = d[7];
+  return {
+    soc: d[8], inW: u16(d, 9), outW: u16(d, 11), minutes: u16(d, 13),
+    dc: !!(s & 0x01), ac: !!(s & 0x02), light: !!(s & 0x10), hz: (s & 0x04) ? 60 : 50, raw: s,
+  };
+}
+
+function parseSettings(d) {
+  if (d.length < 14) throw new Error("Einstellungspaket unvollständig");
+  const f = d[7];
+  return {
+    eco: !!(f & 0x01), ecoTime: d[8], workMode: (f & 0x06) >> 1, car: !!(f & 0x10),
+    hw: version(d[11]), fw: version(d[12]),
+  };
+}
+
+function controlFrame({ dc, ac, light }) {
+  const f = Uint8Array.of(0xA5,0x65,0x00,0xB1,0x01,0x01,0x00,0x00,0x71);
+  if (dc) f[7] |= 0x01;
+  if (ac) f[7] |= 0x02;
+  if (light) f[7] |= 0x20;
+  f[8] = (113 - f[7] + (ac ? 4 : 0)) & 0xff;
+  return f;
+}
+
+// ---- BLE ----------------------------------------------------------------
+let device = null, writeChar = null, notifyChar = null, pollTimer = null;
+let state = null;   // letzter Status
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls) => {
+  const el = $("log"), line = document.createElement("div");
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  if (cls) line.className = cls;
+  el.appendChild(line);
+  while (el.childElementCount > 300) el.firstChild.remove();
+  el.scrollTop = el.scrollHeight;
+};
+const setStatus = (html) => { $("status").innerHTML = html; };
+
+async function connect() {
+  try {
+    const opts = $("allDevices").checked
+      ? { acceptAllDevices: true, optionalServices: [SERVICE] }
+      : { filters: [{ services: [SERVICE] }, { namePrefix: "AP" }, { namePrefix: "ALLPOWERS" }],
+          optionalServices: [SERVICE] };
+    device = await navigator.bluetooth.requestDevice(opts);
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    setStatus(`Verbinde mit <b>${escapeHtml(device.name || device.id)}</b> …`);
+    $("devName").textContent = device.name || "–";
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(SERVICE);
+    notifyChar = await service.getCharacteristic(NOTIFY);
+    writeChar = await service.getCharacteristic(WRITE);
+    notifyChar.addEventListener("characteristicvaluechanged", onNotify);
+    await notifyChar.startNotifications();
+
+    setStatus(`Verbunden mit <b>${escapeHtml(device.name || device.id)}</b>`);
+    log("Verbunden, Notifications auf FFF1 aktiv");
+    setConnectedUi(true);
+    await requestStatus();
+    pollTimer = setInterval(requestStatus, POLL_MS);
+  } catch (e) {
+    if (e.name === "NotFoundError") { setStatus("Keine Auswahl getroffen"); return; }
+    log("Fehler: " + e.message, "err");
+    setStatus(`<span class="err">Fehler: ${escapeHtml(e.message)}</span>`);
+    if (device?.gatt.connected) device.gatt.disconnect();
+  }
+}
+
+function onDisconnected() {
+  clearInterval(pollTimer); pollTimer = null;
+  writeChar = notifyChar = null; state = null;
+  setConnectedUi(false);
+  setStatus("Verbindung getrennt");
+  log("Verbindung getrennt");
+}
+
+async function write(bytes, label) {
+  if (!writeChar) return;
+  log(`→ ${label}: ${hex(bytes)}`);
+  const p = writeChar.properties;
+  if (p.writeWithoutResponse && !p.write) await writeChar.writeValueWithoutResponse(bytes);
+  else await writeChar.writeValueWithResponse(bytes);
+}
+
+async function requestStatus() {
+  try { await write(STATUS_REQUEST, "Statusanfrage"); }
+  catch (e) { log("Schreibfehler: " + e.message, "err"); }
+}
+
+function onNotify(ev) {
+  const d = new Uint8Array(ev.target.value.buffer.slice(ev.target.value.byteOffset,
+                           ev.target.value.byteOffset + ev.target.value.byteLength));
+  const err = validate(d);
+  log(`← ${hex(d)}${err ? "  (" + err + ")" : ""}`, err ? "err" : undefined);
+  if (err) return;
+  try {
+    switch (d[6]) {
+      case CMD_STATUS:   renderStatus(parseStatus(d)); break;
+      case CMD_SETTINGS: renderSettings(parseSettings(d)); break;
+      case CMD_NAME:     $("devName").textContent = new TextDecoder().decode(d.slice(7, 7 + d[5])); break;
+      default:           log(`  unbekannter Befehl 0x${d[6].toString(16).padStart(2, "0")}`);
+    }
+  } catch (e) { log("  " + e.message, "err"); }
+}
+
+// ---- UI -----------------------------------------------------------------
+function renderStatus(s) {
+  state = s;
+  $("soc").innerHTML = `${s.soc}<small> %</small>`;
+  $("socBar").style.width = s.soc + "%";
+  $("inW").innerHTML = `${s.inW}<small> W</small>`;
+  $("outW").innerHTML = `${s.outW}<small> W</small>`;
+  const h = Math.floor(s.minutes / 60), m = s.minutes % 60;
+  $("remain").innerHTML = s.minutes ? `${h}<small> h </small>${m}<small> min</small>` : "–";
+  for (const k of ["ac", "dc", "light"]) {
+    $(k).textContent = s[k] ? "an" : "aus";
+    $(k).classList.toggle("on", s[k]);
+  }
+  $("acHz").textContent = s.hz + " Hz";
+  $("statusBits").textContent = s.raw.toString(2).padStart(8, "0").replace(/(\d{4})/, "$1 ")
+    + `  (0x${s.raw.toString(16).padStart(2, "0")})`;
+  $("updated").textContent = new Date().toLocaleTimeString();
+  renderDevice(s);
+}
+
+// Grafik der Powerstation
+function renderDevice(s) {
+  $("dvLight").classList.toggle("on", !!s?.light);
+  $("dvAc").classList.toggle("on", !!s?.ac);
+  $("dvDc").classList.toggle("on", !!s?.dc);
+  $("dvDcKey").classList.toggle("on", !!s?.dc);
+  $("dvIn").classList.toggle("on", !!s && s.inW > 0);
+  const mins = s ? Math.min(s.minutes, 999 * 60 + 59) : 0;
+  $("dvTime").textContent = s ? `${String(Math.floor(mins / 60)).padStart(3, "0")}:${String(mins % 60).padStart(2, "0")}` : "---:--";
+  $("dvOut").textContent = s ? String(Math.min(s.outW, 999)) : "-";
+  // Platz zwischen Akku-Quadrat und OUT/WATTA ist knapp: lange Zahlen schmaler setzen
+  const outLen = $("dvOut").textContent.length;
+  if (outLen > 1) $("dvOut").setAttribute("textLength", outLen === 2 ? 8 : 8.5);
+  else $("dvOut").removeAttribute("textLength");
+  $("dvOut").setAttribute("lengthAdjust", "spacingAndGlyphs");
+  $("dvPct").textContent = s ? `${s.soc}%` : "--%";
+  $("dvInTxt").textContent = s && s.inW > 0 ? `IN ${s.inW} W` : "";
+  const lit = s ? Math.ceil(s.soc / 25) : 0;
+  for (let i = 0; i < 4; i++) $("dvSeg" + i).classList.toggle("lit", i < lit);
+  $("dvHz").textContent = s ? `${s.hz} Hz` : "";
+  $("dv").setAttribute("aria-label", s
+    ? `Powerstation: ${s.soc} %, AC ${s.ac ? "an" : "aus"}, DC ${s.dc ? "an" : "aus"}, Licht ${s.light ? "an" : "aus"}`
+    : "Powerstation: keine Daten");
+}
+
+function renderSettings(s) {
+  $("eco").textContent = s.eco ? "an" : "aus";
+  $("ecoTime").textContent = s.ecoTime ? s.ecoTime + " h" : "–";
+  $("workMode").textContent = WORK_MODES[s.workMode] ?? `unbekannt (${s.workMode})`;
+  $("car").textContent = s.car ? "an" : "aus";
+  $("dvCar").classList.toggle("on", s.car);
+  $("hw").textContent = s.hw;
+  $("fw").textContent = s.fw;
+}
+
+function setConnectedUi(on) {
+  $("btnConnect").disabled = on;
+  $("btnDisconnect").disabled = !on;
+  $("btnRefresh").disabled = !on;
+  document.querySelectorAll("button[data-out]").forEach(b => b.disabled = !on);
+  $("dv").classList.toggle("dv-live", on);
+  if (!on) { renderDevice(null); $("dvCar").classList.remove("on"); }
+}
+
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+
+document.querySelectorAll("[data-out]").forEach(btn => btn.addEventListener("click", async () => {
+  if (!writeChar) return;
+  if (!state) { log("Noch kein Status empfangen – Schalten nicht möglich", "err"); return; }
+  const key = btn.dataset.out;
+  const next = { dc: state.dc, ac: state.ac, light: state.light, [key]: !state[key] };
+  try {
+    await write(controlFrame(next), `${key.toUpperCase()} ${next[key] ? "an" : "aus"}`);
+    setTimeout(requestStatus, 800);
+  } catch (e) { log("Schreibfehler: " + e.message, "err"); }
+}));
+
+$("btnConnect").addEventListener("click", connect);
+$("btnDisconnect").addEventListener("click", () => device?.gatt.connected && device.gatt.disconnect());
+$("btnRefresh").addEventListener("click", requestStatus);
+
+if (!navigator.bluetooth) {
+  $("unsupported").style.display = "block";
+  $("btnConnect").disabled = true;
+}
+</script>
+</body>
+</html>
